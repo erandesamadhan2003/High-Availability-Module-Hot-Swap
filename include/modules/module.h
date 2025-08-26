@@ -3,27 +3,32 @@
 #include "./moduleState.h"
 #include <string>
 
-namespace Module {
-    class Module_H{
+namespace Modules {
+    class Module{
     protected: 
-        ModuleState::Modulestate currentState;
-        std::string modulename;
+        Modules::ModuleState currentState;
+        std::string moduleName;
         int moduleId;
 
     public: 
-        Module_H(const std::string& name, int id);
+        Module(const std::string& name, int id);
 
-        virtual ~Module_H();
+        virtual ~Module();
 
+        virtual bool load() = 0;
         virtual bool unLoad() = 0;
         virtual bool activate() = 0;
         virtual bool deactivate() = 0;
-        ModuleState::Modulestate getName() const;
+        ModuleState getState() const;
+        std::string getName() const;
+       void setState(ModuleState state);    
 
         int getId () const;
 
         virtual void printStatus() = 0;
     };
+
+    
 }
 
 #endif

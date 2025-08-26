@@ -1,16 +1,17 @@
 #include "modules/moduleState.h"
 
-namespace ModuleState {
-    const char* moduleStateToString(Modulestate state) {
+namespace Modules {
+    const char* moduleStateToString(ModuleState state) {
         switch (state) {
-            case Modulestate::UNLOADED: return "UNLOADED";
-            case Modulestate::ACTIVE: return "ACTIVE";
-            case Modulestate::LOADING: return "LOADING";
-            case Modulestate::STANDBY: return "STANDBY";
-            case Modulestate::FAILED: return "FAILED";
+            case ModuleState::UNLOADED: return "UNLOADED";
+            case ModuleState::ACTIVE: return "ACTIVE";
+            case ModuleState::LOADING: return "LOADING";
+            case ModuleState::STANDBY: return "STANDBY";
+            case ModuleState::FAILED: return "FAILED";
             default: return "UNKNOWN";
         }
     }
 
-    
+    ModuleState stringToModuleState(ModuleState state) {
+    }
 }

@@ -1,8 +1,8 @@
 #ifndef MODULE_STATE_H
 #define MODULE_STATE_H
-
-namespace ModuleState {
-    enum class Modulestate {
+#include <string>
+namespace Modules {
+    enum class ModuleState {
         UNLOADED,
         LOADING,
         ACTIVE,
@@ -10,7 +10,9 @@ namespace ModuleState {
         FAILED
     };
 
-    const char* moduleStateToString(Modulestate state);
+    const char* moduleStateToString(ModuleState state);
+
+    ModuleState stringToModuleState(ModuleState state);
 }
 
 #endif

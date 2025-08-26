@@ -11,6 +11,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(High-Availability-module-hot-swap 
     src/main.cpp
+    src/modules/module.cpp
+    src/modules/moduleState.cpp
 )
 
 target_link_libraries(High-Availability-module-hot-swap PRIVATE Threads::Threads)
