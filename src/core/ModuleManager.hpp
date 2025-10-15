@@ -3,43 +3,71 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <vector>
 #include "IModule.hpp"
 #include "ModuleInfo.hpp"
 #include "DynamicLibrary.hpp"
 
-// Forward declarations
-class IModule;
-class DynamicLibrary;
-
 class ModuleManager {
 private:
     static ModuleManager* instance;
-    std::mutex moduleMutex;
+    mutable std::mutex moduleMutex; // Thread safety ke liye
 
-    struct ModulehHandle {
-        std::unique_ptr<DynamicLibrary> library;
-        IModule* module;
-        ModuleInfo info;
+    // Module storage structure - jaise phone mein app info
+    struct ModuleHandle {
+        std::unique_ptr<DynamicLibrary> library; // Library handle
+        IModule* module;                         // Module object
+        ModuleInfo info;                         // Module information
+        bool markedForUnload;                    // Safe unload ke liye
     };
 
-    std::map<std::string, ModulehHandle> modules;
+    std::map<std::string, ModuleHandle> modules; // All modules store here
 
+    // Private constructor - Singleton pattern
     ModuleManager() = default;
     ~ModuleManager() = default;
+
+    // Helper functions
+    bool safeModuleUnload(ModuleHandle& handle);
+    void cleanupModuleResources(ModuleHandle& handle);
 
 public:
     // Singleton pattern - prevent copying
     ModuleManager(const ModuleManager&) = delete;
     ModuleManager& operator=(const ModuleManager&) = delete;
 
+    // Singleton access - ek hi instance hoga pure system mein
     static ModuleManager& getInstance();
     
-    bool loadModule(const std::string& libraryPath);
-    bool unloadModule(const std::string& moduleName);
-    bool reloadModule(const std::string& moduleName);
-
-    IModule* getModule(const std::string& moduleName);
-    ModuleInfo getModuleInfo(const std::string& moduleName);
+    // === MAIN MODULE OPERATIONS ===
     
-    void printAllModules();
+    // 1. Module load karna
+    bool loadModule(const std::string& libraryPath);
+    
+    // 2. Module unload karna  
+    bool unloadModule(const std::string& moduleName);
+    
+    // 3. Module reload karna (Hot-swap!)
+    bool reloadModule(const std::string& moduleName);
+    
+    // 4. Module access karna
+    IModule* getModule(const std::string& name);
+    
+    // 5. Module information
+    ModuleInfo getModuleInfo(const std::string& name);
+    
+    // 6. All modules list karna
+    std::vector<std::string> getAllModuleNames() const;
+    
+    // 7. Print all modules status
+    void printAllModules() const;
+    
+    // 8. System cleanup - sab kuch band karna
+    void shutdown();
+    
+    // 9. Check if module loaded hai
+    bool isModuleLoaded(const std::string& moduleName) const;
+    
+    // 10. Get loaded modules count
+    size_t getModuleCount() const;
 };

@@ -13,4 +13,8 @@ public:
     void* getFunction(const std::string& functionName);
     bool isLoaded() const;
     std::string getPath() const { return path; }
+
+    // Copying prevent karne ke liye
+    DynamicLibrary(const DynamicLibrary&) = delete;
+    DynamicLibrary& operator=(const DynamicLibrary&) = delete;
 };
