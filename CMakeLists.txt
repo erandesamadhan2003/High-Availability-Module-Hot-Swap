@@ -20,13 +20,24 @@ set(CORE_DIR ${SOURCE_DIR}/core)
 set(MODULES_DIR ${SOURCE_DIR}/modules)
 set(UTILS_DIR ${SOURCE_DIR}/utils)
 set(EXAMPLES_DIR ${CMAKE_SOURCE_DIR}/examples)
+set(TESTS_DIR ${CMAKE_SOURCE_DIR}/tests)
+
+# === LOGGER LIBRARY ===
+add_library(logger_lib SHARED
+    ${UTILS_DIR}/Logger.cpp
+)
+
+# === HEALTH MONITOR LIBRARY ===
+add_library(health_monitor SHARED
+    ${CORE_DIR}/HealthMonitor.cpp
+)
+target_link_libraries(health_monitor logger_lib)
 
 # === MAIN HOTSWAP CORE LIBRARY ===
 add_library(hotswap_core SHARED
     ${CORE_DIR}/ModuleManager.cpp
     ${CORE_DIR}/DynamicLibrary.cpp
     ${CORE_DIR}/IModule.cpp
-    # MODULE FILES YAHAN SE HATA DO - they should be separate libraries
 )
 
 # Platform-specific libraries link karo
@@ -34,96 +45,115 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(hotswap_core PUBLIC dl pthread)
 endif()
 
+# Hotswap core depends on logger AND health_monitor
+target_link_libraries(hotswap_core PUBLIC logger_lib health_monitor)
+
 # Include directories set karo
 target_include_directories(hotswap_core PUBLIC 
     ${SOURCE_DIR}
 )
+target_include_directories(logger_lib PUBLIC 
+    ${SOURCE_DIR}
+)
+target_include_directories(health_monitor PUBLIC 
+    ${SOURCE_DIR}
+)
 
-# === SIMPLE MODULE LIBRARY ===
+# === MODULE LIBRARIES ===
+
+# Simple Module
 add_library(simple_module SHARED
     ${MODULES_DIR}/SimpleModule.cpp
 )
 target_link_libraries(simple_module hotswap_core)
 
-# === CALCULATOR MODULE LIBRARY ===  
+# Calculator Module (original)
 add_library(calculator_module SHARED
     ${MODULES_DIR}/CalculatorModule.cpp
 )
 target_link_libraries(calculator_module hotswap_core)
 
-# Linux pe .so file ka prefix remove karo
-set_target_properties(simple_module PROPERTIES
-    PREFIX ""
-    OUTPUT_NAME "simple_module"
-)
-
-set_target_properties(calculator_module PROPERTIES
-    PREFIX ""
-    OUTPUT_NAME "calculator_module"
-)
-
-# === DEMO EXECUTABLE ===
-add_executable(demo ${EXAMPLES_DIR}/main.cpp)
-target_link_libraries(demo hotswap_core)
-
-# === PHASE 3 TEST EXECUTABLE ===
-add_executable(phase3_test ${EXAMPLES_DIR}/phase3_test.cpp)
-target_link_libraries(phase3_test hotswap_core)
-
-# === PHASE 4 TEST EXECUTABLE ===
-add_executable(phase4_test ${EXAMPLES_DIR}/phase4_test.cpp)
-target_link_libraries(phase4_test hotswap_core)
-
+# Calculator Module Version 1
 add_library(calculator_v1 SHARED
     ${MODULES_DIR}/CalculatorModuleV1.cpp
 )
 target_link_libraries(calculator_v1 hotswap_core)
-set_target_properties(calculator_v1 PROPERTIES
-    PREFIX ""
-    OUTPUT_NAME "calculator_v1"
-)
 
 # Calculator Module Version 2
 add_library(calculator_v2 SHARED
     ${MODULES_DIR}/CalculatorModuleV2.cpp
 )
 target_link_libraries(calculator_v2 hotswap_core)
-set_target_properties(calculator_v2 PROPERTIES
-    PREFIX ""
-    OUTPUT_NAME "calculator_v2"
-)
 
 # Text Processor Module Version 1
 add_library(textprocessor_v1 SHARED
     ${MODULES_DIR}/TextProcessorV1.cpp
 )
 target_link_libraries(textprocessor_v1 hotswap_core)
-set_target_properties(textprocessor_v1 PROPERTIES
+
+# Unstable Module for Health Monitoring Demo
+add_library(unstable_module SHARED
+    ${EXAMPLES_DIR}/health_monitor_demo.cpp
+)
+target_link_libraries(unstable_module hotswap_core)
+
+# Linux pe .so file ka prefix remove karo for all modules
+set_target_properties(
+    simple_module
+    calculator_module
+    calculator_v1
+    calculator_v2
+    textprocessor_v1
+    unstable_module
+    PROPERTIES
     PREFIX ""
-    OUTPUT_NAME "textprocessor_v1"
+    OUTPUT_NAME ""
 )
 
-# Phase 5 Test Executable
+# === EXECUTABLES ===
+
+# Demo Executables
+add_executable(demo ${EXAMPLES_DIR}/main.cpp)
+target_link_libraries(demo hotswap_core)
+
+add_executable(phase3_test ${EXAMPLES_DIR}/phase3_test.cpp)
+target_link_libraries(phase3_test hotswap_core)
+
+add_executable(phase4_test ${EXAMPLES_DIR}/phase4_test.cpp)
+target_link_libraries(phase4_test hotswap_core)
+
 add_executable(phase5_test ${EXAMPLES_DIR}/phase5_test.cpp)
 target_link_libraries(phase5_test hotswap_core)
 
-# Advanced Demo Application
 add_executable(advanced_demo ${EXAMPLES_DIR}/advanced_demo.cpp)
 target_link_libraries(advanced_demo hotswap_core)
 
-# Simple Demo (if not already present)
 add_executable(simple_demo ${EXAMPLES_DIR}/simple_demo.cpp)
 target_link_libraries(simple_demo hotswap_core)
 
-# Test Executables
-add_executable(test_basic_loading tests/test_basic_loading.cpp)
+add_executable(logging_demo ${EXAMPLES_DIR}/logging_demo.cpp)
+target_link_libraries(logging_demo hotswap_core)
+
+# Health Monitor Demo
+add_executable(health_demo ${EXAMPLES_DIR}/health_monitor_demo.cpp)
+target_link_libraries(health_demo hotswap_core health_monitor)
+
+# === TEST EXECUTABLES ===
+add_executable(test_basic_loading ${TESTS_DIR}/test_basic_loading.cpp)
 target_link_libraries(test_basic_loading hotswap_core)
 
-add_executable(test_invalid_module tests/test_invalid_module.cpp)
+add_executable(test_invalid_module ${TESTS_DIR}/test_invalid_module.cpp)
 target_link_libraries(test_invalid_module hotswap_core)
 
-add_executable(test_duplicate_loading tests/test_duplicate_loading.cpp)
+add_executable(test_duplicate_loading ${TESTS_DIR}/test_duplicate_loading.cpp)
 target_link_libraries(test_duplicate_loading hotswap_core)
 
-add_executable(test_stress tests/test_stress.cpp)
+add_executable(test_stress ${TESTS_DIR}/test_stress.cpp)
 target_link_libraries(test_stress hotswap_core dl pthread)
+
+message(STATUS "Hot-Swap System configured successfully with Health Monitoring!")
+message(STATUS "Available targets:")
+message(STATUS "  - Libraries: hotswap_core, logger_lib, health_monitor")
+message(STATUS "  - Modules: simple_module, calculator_v1, calculator_v2, textprocessor_v1, unstable_module")
+message(STATUS "  - Demos: demo, simple_demo, advanced_demo, logging_demo, health_demo")
+message(STATUS "  - Tests: phase3_test, phase4_test, phase5_test, test_basic_loading, test_invalid_module, test_stress")

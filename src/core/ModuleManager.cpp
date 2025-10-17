@@ -1,4 +1,6 @@
 #include "ModuleManager.hpp"
+#include "../utils/Logger.hpp"
+#include "HealthMonitor.hpp"
 #include <iostream>
 #include <dlfcn.h>
 
@@ -16,17 +18,23 @@ ModuleManager& ModuleManager::getInstance() {
 
 // Module load karna - MOST IMPORTANT FUNCTION
 bool ModuleManager::loadModule(const std::string& libraryPath) {
-    std::lock_guard<std::mutex> lock(moduleMutex); // Thread safety
+    std::lock_guard<std::mutex> lock(moduleMutex);
     
-    std::cout << "\nMODULE LOAD START: " << libraryPath << std::endl;
+    auto& logger = Logger::getInstance();
+    auto& healthMonitor = HealthMonitor::getInstance();
+    
+    logger.info("Loading module: " + libraryPath, "ModuleManager");
+    auto loadStartTime = std::chrono::steady_clock::now();
 
     try {
         // Step 1: Library load karo
         auto library = std::make_unique<DynamicLibrary>(libraryPath);
         if (!library->isLoaded()) {
-            std::cerr << "Failed to load library: " << libraryPath << std::endl;
+            logger.error("Failed to load library: " + libraryPath, "ModuleManager");
             return false;
         }
+
+        logger.debug("Library loaded successfully: " + libraryPath, "ModuleManager");
 
         // Step 2: Factory functions get karo
         using CreateFunc = IModule* (*)();
@@ -34,20 +42,22 @@ bool ModuleManager::loadModule(const std::string& libraryPath) {
         auto destroyModule = (void (*)(IModule*))library->getFunction("destroyModule");
 
         if (!createModule || !destroyModule) {
-            std::cerr << "Factory functions not found in: " << libraryPath << std::endl;
+            logger.error("Factory functions not found in: " + libraryPath, "ModuleManager");
             return false;
         }
+
+        logger.debug("Factory functions found", "ModuleManager");
 
         // Step 3: Module create karo
         IModule* module = createModule();
         if (!module) {
-            std::cerr << "Failed to create module from: " << libraryPath << std::endl;
+            logger.error("Failed to create module from: " + libraryPath, "ModuleManager");
             return false;
         }
 
         // Step 4: Module initialize karo
         if (!module->init()) {
-            std::cerr << "Module initialization failed: " << libraryPath << std::endl;
+            logger.error("Module initialization failed: " + libraryPath, "ModuleManager");
             destroyModule(module);
             return false;
         }
@@ -79,19 +89,32 @@ bool ModuleManager::loadModule(const std::string& libraryPath) {
             }
         };
 
+        // Step 7: Map mein store karo
         modules[info.name] = std::move(handle);
 
+        // Step 8: Module start karo
         module->start();
         modules[info.name].info.isRunning = true;
         modules[info.name].info.isHealthy = true;
 
-        std::cout << "MODULE LOAD SUCCESS: " << info.name 
-                  << " v" << info.version << std::endl;
-                  
+        // Register with health monitor - FIXED LAMBDA
+        auto healthCheckFunction = [this, moduleName = info.name]() -> bool {
+            auto* modulePtr = this->getModule(moduleName);
+            return modulePtr ? modulePtr->isHealthy() : false;
+        };
+        healthMonitor.registerModule(info.name, healthCheckFunction);
+
+        // Record metrics
+        auto loadEndTime = std::chrono::steady_clock::now();
+        auto loadTime = std::chrono::duration_cast<std::chrono::milliseconds>(loadEndTime - loadStartTime);
+        healthMonitor.recordModuleLoad(info.name, loadTime);
+
+        logger.info("Module loaded successfully: " + info.name + " v" + info.version + 
+                   " (load time: " + std::to_string(loadTime.count()) + "ms)", "ModuleManager");
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "EXCEPTION in loadModule: " << e.what() << std::endl;
+        logger.error("Exception in loadModule: " + std::string(e.what()), "ModuleManager");
         return false;
     }
 }
@@ -99,13 +122,16 @@ bool ModuleManager::loadModule(const std::string& libraryPath) {
 bool ModuleManager::unloadModule(const std::string& moduleName) {
     std::lock_guard<std::mutex> lock(moduleMutex);
     
+    auto& logger = Logger::getInstance();
+    auto& healthMonitor = HealthMonitor::getInstance();
+    
+    logger.info("Unloading module: " + moduleName, "ModuleManager");
+
     auto it = modules.find(moduleName);
     if (it == modules.end()) {
-        std::cerr << "Module not found: " << moduleName << std::endl;
+        logger.warning("Module not found for unloading: " + moduleName, "ModuleManager");
         return false;
     }
-
-    std::cout << "\nMODULE UNLOAD START: " << moduleName << std::endl;
 
     try {
         ModuleHandle& handle = it->second;
@@ -114,7 +140,14 @@ bool ModuleManager::unloadModule(const std::string& moduleName) {
         if (handle.module) {
             handle.module->stop();
             handle.info.isRunning = false;
+            logger.debug("Module stopped: " + moduleName, "ModuleManager");
         }
+
+        // Unregister from health monitor
+        healthMonitor.unregisterModule(moduleName);
+        
+        // Record metrics
+        healthMonitor.recordModuleUnload(moduleName);
 
         // Step 2: Cleanup karo
         cleanupModuleResources(handle);
@@ -122,11 +155,11 @@ bool ModuleManager::unloadModule(const std::string& moduleName) {
         // Step 3: Map se remove karo
         modules.erase(it);
         
-        std::cout << "MODULE UNLOAD SUCCESS: " << moduleName << std::endl;
+        logger.info("Module unloaded successfully: " + moduleName, "ModuleManager");
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "EXCEPTION in unloadModule: " << e.what() << std::endl;
+        logger.error("Exception in unloadModule: " + std::string(e.what()), "ModuleManager");
         return false;
     }
 }
@@ -211,24 +244,26 @@ size_t ModuleManager::getModuleCount() const {
     return modules.size();
 }
 
-
 // MOST IMPORTANT: HOT-SWAP FUNCTION
 bool ModuleManager::reloadModule(const std::string& moduleName) {
     std::lock_guard<std::mutex> lock(moduleMutex);
     
+    auto& logger = Logger::getInstance();
+    auto& healthMonitor = HealthMonitor::getInstance();
+    
+    logger.info("Hot-swap started for module: " + moduleName, "ModuleManager");
+
     auto it = modules.find(moduleName);
     if (it == modules.end()) {
-        std::cerr << "Module not found for reload: " << moduleName << std::endl;
+        logger.error("Module not found for hot-swap: " + moduleName, "ModuleManager");
         return false;
     }
 
-    std::cout << "\nHOT-SWAP STARTED: " << moduleName << std::endl;
-    
     std::string libraryPath = it->second.info.libraryPath;
     
     try {
         // Step 1: Old module unload karo
-        std::cout << "Step 1: Unloading old module..." << std::endl;
+        logger.debug("Unloading old module: " + moduleName, "ModuleManager");
         ModuleHandle oldHandle = std::move(it->second);
         modules.erase(it);
         
@@ -239,7 +274,7 @@ bool ModuleManager::reloadModule(const std::string& moduleName) {
         }
         
         // Step 2: New module load karo
-        std::cout << "Step 2: Loading new module..." << std::endl;
+        logger.debug("Loading new module: " + libraryPath, "ModuleManager");
         bool loadSuccess = false;
         
         // Temporary mutex unlock for loading
@@ -248,15 +283,18 @@ bool ModuleManager::reloadModule(const std::string& moduleName) {
         moduleMutex.lock();
         
         if (!loadSuccess) {
-            std::cerr << "HOT-SWAP FAILED: Failed to load new module" << std::endl;
+            logger.error("Hot-swap failed: Failed to load new module", "ModuleManager");
+            healthMonitor.recordHotSwap(moduleName, false);
             return false;
         }
         
-        std::cout << "HOT-SWAP SUCCESS: " << moduleName << std::endl;
+        healthMonitor.recordHotSwap(moduleName, true);
+        logger.info("Hot-swap successful: " + moduleName, "ModuleManager");
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "HOT-SWAP EXCEPTION: " << e.what() << std::endl;
+        healthMonitor.recordHotSwap(moduleName, false);
+        logger.error("Hot-swap exception: " + std::string(e.what()), "ModuleManager");
         return false;
     }
 }
@@ -286,29 +324,23 @@ void ModuleManager::printAllModules() const {
     std::cout << "=========================" << std::endl;
 }
 
-
 void ModuleManager::shutdown() {
     std::lock_guard<std::mutex> lock(moduleMutex);
     
-    std::cout << "\nSYSTEM SHUTDOWN STARTED" << std::endl;
-    std::cout << "Unloading " << modules.size() << " modules..." << std::endl;
+    auto& logger = Logger::getInstance();
+    logger.info("System shutdown started. Unloading " + std::to_string(modules.size()) + " modules", "ModuleManager");
     
     for (auto& pair : modules) {
         ModuleHandle& handle = pair.second;
         
         if (handle.module) {
-            std::cout << "Stopping: " << handle.info.name << std::endl;
+            logger.debug("Stopping module: " + handle.info.name, "ModuleManager");
             handle.module->stop();
             handle.info.isRunning = false;
+            cleanupModuleResources(handle);
         }
     }
     
-    auto it = modules.begin();
-    while (it != modules.end()) {
-        ModuleHandle& handle = it->second;
-        cleanupModuleResources(handle);
-        it = modules.erase(it); 
-    }
-    
-    std::cout << "SYSTEM SHUTDOWN COMPLETED" << std::endl;
+    modules.clear();
+    logger.info("System shutdown completed", "ModuleManager");
 }
