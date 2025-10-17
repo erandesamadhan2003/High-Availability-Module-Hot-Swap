@@ -70,4 +70,8 @@ public:
     
     // 10. Get loaded modules count
     size_t getModuleCount() const;
+
+    // Scan /proc/self/maps for loaded .so files and log them.
+    // Compares runtime shared libs to modules managed by ModuleManager.
+    void scanAndLogRuntimeSharedLibraries() const;
 };

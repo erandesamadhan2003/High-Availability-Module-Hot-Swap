@@ -9,6 +9,7 @@ int main() {
     
     // ModuleManager test karo
     auto& manager = ModuleManager::getInstance();
+    manager.scanAndLogRuntimeSharedLibraries();
     
     std::cout << "\n1. Testing ModuleManager singleton..." << std::endl;
     manager.printAllModules();

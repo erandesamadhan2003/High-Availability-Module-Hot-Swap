@@ -3,6 +3,9 @@
 #include "HealthMonitor.hpp"
 #include <iostream>
 #include <dlfcn.h>
+#include <fstream>
+#include <sstream>
+#include <set>
 
 // Singleton instance
 ModuleManager* ModuleManager::instance = nullptr;
@@ -343,4 +346,56 @@ void ModuleManager::shutdown() {
     
     modules.clear();
     logger.info("System shutdown completed", "ModuleManager");
+}
+
+void ModuleManager::scanAndLogRuntimeSharedLibraries() const {
+    auto& logger = Logger::getInstance();
+
+    std::set<std::string> runtimeLibs;
+    std::ifstream maps("/proc/self/maps");
+    if (!maps.is_open()) {
+        logger.warning("Unable to open /proc/self/maps to scan runtime libraries", "ModuleManager");
+        return;
+    }
+
+    std::string line;
+    while (std::getline(maps, line)) {
+        // Last token (if present) is the mapped path
+        std::istringstream iss(line);
+        std::string addr, perms, offset, dev, inode, path;
+        if (!(iss >> addr >> perms >> offset >> dev >> inode)) {
+            continue;
+        }
+        if (!(iss >> path)) {
+            continue;
+        }
+        // Only keep real file-backed shared objects
+        if (path.size() > 3 && path.find(".so") != std::string::npos) {
+            runtimeLibs.insert(path);
+        }
+    }
+    maps.close();
+
+    // Snapshot managed module library paths
+    std::set<std::string> managedPaths;
+    {
+        std::lock_guard<std::mutex> lock(moduleMutex);
+        for (const auto& pair : modules) {
+            managedPaths.insert(pair.second.info.libraryPath);
+        }
+    }
+
+    logger.info("Runtime shared library scan: found " + std::to_string(runtimeLibs.size()) + " .so mappings", "ModuleManager");
+
+    for (const auto& lib : runtimeLibs) {
+        bool managed = managedPaths.find(lib) != managedPaths.end();
+        logger.info(std::string(managed ? "[MANAGED] " : "[UNMANAGED] ") + lib, "ModuleManager");
+    }
+
+    // Optionally: log managed modules that are not present in runtime libs
+    for (const auto& mp : managedPaths) {
+        if (runtimeLibs.find(mp) == runtimeLibs.end()) {
+            logger.warning("Managed module library not present in runtime maps: " + mp, "ModuleManager");
+        }
+    }
 }

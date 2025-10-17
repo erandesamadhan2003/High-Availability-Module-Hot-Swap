@@ -75,7 +75,10 @@ void HealthMonitor::monitoringLoop() {
             logger.error("Health monitor exception: " + std::string(e.what()), "HealthMonitor");
         }
 
-        std::this_thread::sleep_for(checkInterval);
+        // run runtime shared-library scan and log results
+        ModuleManager::getInstance().scanAndLogRuntimeSharedLibraries();
+
+        std::this_thread::sleep_for(std::chrono::seconds(5));
     }
 
     logger.debug("Health monitor loop stopped", "HealthMonitor");
