@@ -47,9 +47,29 @@ make
 # Run comprehensive test suite
 ./tests/run_all_tests.sh
 
+cd build/
 # Run individual tests
 ./test_basic_loading
 ./test_stress
+
+# Check for memory leaks
+valgrind --leak-check=full ./simple_demo
+
+# Check for memory errors
+valgrind --tool=memcheck ./advanced_demo
+
+# Performance Profiling
+# Profile with gprof
+cmake -DCMAKE_BUILD_TYPE=Release -DPROFILING=ON ..
+make
+./advanced_demo
+gprof ./advanced_demo gmon.out > analysis.txt
+
+# Profile with perf
+perf record ./advanced_demo
+perf report
 ```
+
+
 
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.10)
 project(HotSwapSystem VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -40,7 +40,6 @@ add_library(hotswap_core SHARED
     ${CORE_DIR}/IModule.cpp
 )
 
-# Platform-specific libraries link karo
 if(UNIX AND NOT APPLE)
     target_link_libraries(hotswap_core PUBLIC dl pthread)
 endif()
@@ -48,7 +47,6 @@ endif()
 # Hotswap core depends on logger AND health_monitor
 target_link_libraries(hotswap_core PUBLIC logger_lib health_monitor)
 
-# Include directories set karo
 target_include_directories(hotswap_core PUBLIC 
     ${SOURCE_DIR}
 )
@@ -97,7 +95,6 @@ add_library(unstable_module SHARED
 )
 target_link_libraries(unstable_module hotswap_core)
 
-# Linux pe .so file ka prefix remove karo for all modules
 set_target_properties(
     simple_module
     calculator_module
