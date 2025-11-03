@@ -41,6 +41,37 @@ make
 ./simple_demo
 ```
 
+### Docker (build & run)
+
+If you prefer to build and run the project inside Docker the repository includes a `dockerfile` (lowercase) at project root. Example commands:
+
+```bash
+# Build the image (use BuildKit for faster, cached builds if available)
+export DOCKER_BUILDKIT=1
+docker build -t hotswap:latest -f dockerfile .
+
+# Run the image (default CMD runs the demo copied into /app/build)
+docker run --rm hotswap:latest
+
+# If you see shared-library errors at runtime, run interactively to inspect files
+docker run --rm -it --entrypoint bash hotswap:latest
+# inside container: find /app -type f -name '*.so' -print
+
+# If libraries are in /app/build you can set LD_LIBRARY_PATH when running
+docker run --rm -e LD_LIBRARY_PATH=/app/build hotswap:latest
+
+# Iterative development: mount source and build inside container to avoid
+# rebuilding the whole image each edit
+docker run --rm -it -v "$(pwd)":/app -w /app ubuntu:20.04 bash
+# inside: apt-get update && apt-get install -y build-essential cmake ninja-build
+# then build as usual: mkdir -p build && cd build && cmake -G Ninja .. && cmake --build . --target advanced_demo
+```
+
+Notes:
+- The included `dockerfile` is a multi-stage builder that builds only the `advanced_demo` target and copies artifacts to the runtime stage. Adjust the Dockerfile if you want a different target.
+- If you change the Dockerfile name to `Dockerfile` (capital D), you can omit `-f dockerfile` when calling `docker build`.
+- Use `LD_LIBRARY_PATH` or `ENV LD_LIBRARY_PATH=/app/build` in the Docker image to ensure the dynamic loader finds `.so` files.
+
 ### Run Test
 
 ```bash
